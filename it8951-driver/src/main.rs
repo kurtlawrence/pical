@@ -11,7 +11,13 @@ fn main() -> Result<()> {
     } else {
         app.load_image()?
     };
-    let diff = app.diff.as_ref().map(read_image).transpose()?;
+    // disable diff functionality for now
+    let diff = app
+        .diff
+        .as_ref()
+        .filter(|_| false)
+        .map(read_image)
+        .transpose()?;
 
     let mut driver = app.build_driver()?;
     driver.push_image(&img, diff.as_ref())?;
