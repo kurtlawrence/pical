@@ -380,7 +380,7 @@ fn push_bitmap(img: &Path, old: Option<&Path>) -> Result<()> {
     let mut cmd = std::process::Command::new("./it8951-driver");
     cmd.arg(img.display().to_string());
     if let Some(old) = &old.map(|x| x.display().to_string()) {
-        cmd.args(["--old", old]);
+        cmd.args(["--diff", old]);
     }
     let x = cmd
         .status()
