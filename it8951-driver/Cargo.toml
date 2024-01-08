@@ -1,0 +1,11 @@
+[package]
+name = "it8951-driver"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.4", features = ["derive"] }
+image.workspace = true
+it8951.git = "https://github.com/pbert519/it8951"
+linux-embedded-hal = "0.3.2"
+miette.workspace = true

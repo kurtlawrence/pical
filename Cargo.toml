@@ -1,0 +1,47 @@
+[package]
+name = "pical"
+version = "0.0.1"
+edition = "2021"
+
+[workspace]
+members = ["it8951-driver"]
+
+[lib]
+path = "app/lib.rs"
+
+[[bin]]
+path = "app/main.rs"
+name = "pical"
+
+[features]
+local = ["dep:serde_json"]
+
+[workspace.dependencies]
+image = "0.24"
+miette = { version = "5", features = ["fancy"] }
+
+[dependencies]
+egui = "0.24"
+euc.git = "https://github.com/zesterer/euc"
+humantime = "2"
+humantime-serde = "1"
+ical = { version = "0.9", features = ["ical"] }
+image.workspace = true
+log = "0.4"
+miette.workspace = true
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", optional = true }
+simplelog = "0.12"
+time = { version = "0.3", features = ["macros", "serde-human-readable"] }
+tokio = { version = "1", features = ["full"] }
+toml = "0.8"
+
+
+[dependencies.reqwest]
+version = "0.11"
+default-features = false
+features = ["json", "gzip", "rustls-tls"]
+
+[dev-dependencies]
+quickcheck = "1"
+quickcheck_macros = "1"
