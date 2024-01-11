@@ -43,42 +43,34 @@ impl Render<Model> for Layout {
         };
         size_fonts(&mut ui.style_mut().text_styles, zoom);
 
-        ui.columns(3, |cs| {
-            let height = 20.0 * zoom;
+        let height = 20.0 * zoom;
+        ui.set_height(height);
+        ui.horizontal(|ui| {
             // left
-            cs[0].set_height(height);
-            cs[0].with_layout(egui::Layout::left_to_right(Align::BOTTOM), |ui| {
-                let date = self
-                    .now
-                    .format(format_description!(
-                        "[weekday] [day padding:none] [month repr:long] [year]"
-                    ))
-                    .unwrap_or_else(|_| "?".into());
-                ui.heading(date);
+            let date = self
+                .now
+                .format(format_description!(
+                    "[weekday] [day padding:none] [month repr:long] [year]"
+                ))
+                .unwrap_or_else(|_| "?".into());
+            ui.heading(date);
 
-                let ordinal = self
-                    .now
-                    .format(format_description!("[ordinal]"))
-                    .unwrap_or_else(|_| "?".into());
-                ui.small(format!("Day {ordinal}"));
-            });
+            let ordinal = self
+                .now
+                .format(format_description!("[ordinal]"))
+                .unwrap_or_else(|_| "?".into());
+            ui.small(format!("Day {ordinal}"));
 
             // center
-            cs[1].set_height(height);
-            cs[1].with_layout(
-                egui::Layout::right_to_left(Align::BOTTOM).with_main_justify(true),
-                |ui| {
-                    let time = self
-                        .now
-                        .format(format_description!("[hour repr:24]:[minute]"))
-                        .unwrap_or_else(|_| "?".into());
-                    ui.heading(time);
-                },
-            );
+            ui.add_space(20. * zoom);
+            let time = self
+                .now
+                .format(format_description!("[hour repr:24]:[minute]"))
+                .unwrap_or_else(|_| "?".into());
+            ui.heading(time);
 
             // right
-            cs[2].set_height(height);
-            cs[2].with_layout(egui::Layout::right_to_left(Align::BOTTOM), |ui| {
+            ui.with_layout(egui::Layout::right_to_left(Align::BOTTOM), |ui| {
                 let fontsize = 20.0 * zoom;
                 if let Some(weather) = model.weather.as_ref().map(|x| &x.current) {
                     if let Some(x) = weather.precipitation_prob {
@@ -124,8 +116,7 @@ fn moon_icon(ui: &mut Ui, phase: moon::Phase, size: f32) {
 fn weather_icon(ui: &mut Ui, code: weather::Code, size: f32) {
     use weather::Code::*;
     let txt = match code {
-        ClearSky => "☀",
-        MainlyClear => "🌤",
+        ClearSky | MainlyClear => "☀",
         PartlyCloudy => "⛅",
         Overcast => "☁",
         Fog => "🌫",
