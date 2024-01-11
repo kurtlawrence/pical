@@ -153,7 +153,7 @@ fn find_param(prop: &Property, name: &str) -> Option<String> {
         .as_ref()?
         .iter()
         .find(|x| x.0 == name)
-        .and_then(|x| x.1.get(0))
+        .and_then(|x| x.1.first())
         .cloned()
 }
 

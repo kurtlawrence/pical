@@ -37,8 +37,11 @@ impl Default for Layout {
 
 impl Render<Model> for Layout {
     fn render(&self, ui: &mut Ui, model: Model) {
-        let zoom = self.zoom;
-        size_fonts(&mut ui.style_mut().text_styles, self.zoom);
+        let zoom = match self.mode {
+            Mode::Fortnight(_) => self.zoom * 1.4,
+            Mode::Month(_) => self.zoom,
+        };
+        size_fonts(&mut ui.style_mut().text_styles, zoom);
 
         ui.columns(3, |cs| {
             let height = 20.0 * zoom;
@@ -137,6 +140,7 @@ fn weather_icon(ui: &mut Ui, code: weather::Code, size: f32) {
 
 #[derive(Clone)]
 pub enum Mode {
+    Fortnight(Fortnight),
     Month(Month),
 }
 
@@ -144,6 +148,59 @@ impl Render<(&Layout, Model)> for Mode {
     fn render(&self, ui: &mut Ui, ctx: (&Layout, Model)) {
         match self {
             Mode::Month(month) => month.render(ui, ctx),
+            Mode::Fortnight(fnite) => fnite.render(ui, ctx),
+        }
+    }
+}
+
+// ##### FORTNIGHT #############################################################
+
+#[derive(Default, Copy, Clone)]
+pub struct Fortnight;
+
+impl From<Fortnight> for Mode {
+    fn from(value: Fortnight) -> Self {
+        Mode::Fortnight(value)
+    }
+}
+
+impl Render<(&Layout, Model)> for Fortnight {
+    fn render(&self, ui: &mut Ui, (layout, model): (&Layout, Model)) {
+        let mut evs = model.cals.values().flatten().collect::<Vec<_>>();
+        evs.sort_by(|a, b| a.start.cmp(&b.start));
+
+        let zoom = layout.zoom;
+        ui.spacing_mut().item_spacing = Vec2::ZERO;
+
+        let start = week_start(layout.now.date());
+        let end = week_end(week_end(layout.now.date()).next_day().unwrap());
+        let mut days = std::iter::successors(Some(start), |x| x.next_day())
+            .take_while(|x| x <= &end)
+            .collect::<Vec<_>>()
+            .into_iter();
+        let days = days.by_ref();
+        debug_assert_eq!(days.len() % 7, 0);
+
+        let rows = [4, 3, 4, 3];
+        let row_height = ui.available_height() / rows.len() as f32;
+        let mut evs = evs.as_slice();
+        for cols in rows {
+            ui.columns(cols, |cs| {
+                days.zip(cs).for_each(|(day, ui)| {
+                    // progressively shrink the slice
+                    evs = remove_earlier_events(evs, day);
+                    let cell = CellWidget {
+                        zoom: zoom * 1.3,
+                        display_weekday: true,
+                        is_today: day == layout.now.date(),
+                        day,
+                        model: &model,
+                    };
+                    ui.allocate_ui(vec2(ui.available_width(), row_height), |ui| {
+                        cell.day_cell(ui, evs);
+                    });
+                });
+            });
         }
     }
 }
@@ -193,6 +250,7 @@ impl Render<(&Layout, Model)> for Month {
                     let cell = CellWidget {
                         zoom,
                         is_today: day == layout.now.date(),
+                        display_weekday: false,
                         day,
                         model: &model,
                     };
@@ -209,6 +267,8 @@ fn end_of_month(date: Date) -> Date {
     date.replace_day(time::util::days_in_year_month(date.year(), date.month()))
         .unwrap()
 }
+
+// ##### COMMON ################################################################
 
 fn week_start(date: Date) -> Date {
     if date.weekday() == Weekday::Monday {
@@ -239,6 +299,7 @@ fn remove_earlier_events<'a>(evs: &'a [&'a Event], before: Date) -> &'a [&'a Eve
 struct CellWidget<'a> {
     zoom: f32,
     is_today: bool,
+    display_weekday: bool,
     day: Date,
     model: &'a Model,
 }
@@ -248,6 +309,7 @@ impl<'a> CellWidget<'a> {
         let Self {
             zoom,
             is_today: _,
+            display_weekday: _,
             day,
             model: _,
         } = *self;
@@ -277,6 +339,7 @@ impl<'a> CellWidget<'a> {
         let Self {
             zoom,
             is_today,
+            display_weekday,
             day,
             model,
         } = *self;
@@ -291,7 +354,13 @@ impl<'a> CellWidget<'a> {
             }
             ui.set_height(16.0 * zoom);
             ui.horizontal_centered(|ui| {
-                ui.label(day.day().to_string());
+                ui.horizontal(|ui| {
+                    if display_weekday {
+                        ui.label(&day.weekday().to_string()[..3]);
+                        ui.add_space(2.0 * zoom);
+                    }
+                    ui.label(day.day().to_string());
+                });
 
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                     if let Some(weather) = model.weather.as_ref().and_then(|x| x.forecast.get(&day))
@@ -316,6 +385,7 @@ impl<'a> CellWidget<'a> {
         let Self {
             zoom,
             is_today: _,
+            display_weekday: _,
             day,
             model: _,
         } = *self;

@@ -30,9 +30,10 @@ async fn main() -> Result<()> {
     let state = State {
         layout: pical::layout::Layout {
             zoom,
+            mode: pical::layout::Fortnight.into(),
             ..Default::default()
         },
-        push_bitmap: push_bitmap,
+        push_bitmap,
         ..Default::default()
     };
 
@@ -51,14 +52,7 @@ async fn main() -> Result<()> {
         stormglassio_apikey,
         Duration::from_secs(61),
     )?);
-    render_loop(
-        dispatch,
-        display_refresh.try_into().expect("positive"),
-        width,
-        height,
-        scaling,
-    )
-    .await
+    render_loop(dispatch, display_refresh, width, height, scaling).await
 }
 
 fn init_logging() -> Result<()> {

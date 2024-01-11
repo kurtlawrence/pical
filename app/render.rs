@@ -183,7 +183,7 @@ impl<'a> Pipeline<'_> for Mesh<'a> {
         let PipelineVertex { colour, uv } = vs_out;
         self.sampler
             .as_ref()
-            .map(|sampler| Rgba::from(sampler.sample(uv.into())) * colour)
+            .map(|sampler| sampler.sample(uv.into()) * colour)
             .unwrap_or(colour)
     }
 

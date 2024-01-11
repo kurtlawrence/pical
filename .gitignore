@@ -1,5 +1,6 @@
 config.pical.toml
 frame.pical.bmp
+frame.pical.old.bmp
 .cargo/
 local/
 os/headless.apkovl.tar.gz*

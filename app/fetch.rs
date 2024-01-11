@@ -44,7 +44,7 @@ where
         .await
         .into_diagnostic()
         .wrap_err_with(|| format!("URL: {url}"))
-        .wrap_err_with(|| format!("failed to send GET"))?;
+        .wrap_err("failed to send GET")?;
     resp.error_for_status_ref()
         .into_diagnostic()
         .wrap_err_with(|| format!("URL: {url}"))
