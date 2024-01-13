@@ -38,7 +38,7 @@ impl Default for Layout {
 impl Render<Model> for Layout {
     fn render(&self, ui: &mut Ui, model: Model) {
         let zoom = match self.mode {
-            Mode::Fortnight(_) => self.zoom * 1.4,
+            Mode::TwelveDay(_) => self.zoom * 1.4,
             Mode::Month(_) => self.zoom,
         };
         size_fonts(&mut ui.style_mut().text_styles, zoom);
@@ -131,7 +131,7 @@ fn weather_icon(ui: &mut Ui, code: weather::Code, size: f32) {
 
 #[derive(Clone)]
 pub enum Mode {
-    Fortnight(Fortnight),
+    TwelveDay(TwelveDay),
     Month(Month),
 }
 
@@ -139,7 +139,7 @@ impl Render<(&Layout, Model)> for Mode {
     fn render(&self, ui: &mut Ui, ctx: (&Layout, Model)) {
         match self {
             Mode::Month(month) => month.render(ui, ctx),
-            Mode::Fortnight(fnite) => fnite.render(ui, ctx),
+            Mode::TwelveDay(fnite) => fnite.render(ui, ctx),
         }
     }
 }
@@ -147,15 +147,15 @@ impl Render<(&Layout, Model)> for Mode {
 // ##### FORTNIGHT #############################################################
 
 #[derive(Default, Copy, Clone)]
-pub struct Fortnight;
+pub struct TwelveDay;
 
-impl From<Fortnight> for Mode {
-    fn from(value: Fortnight) -> Self {
-        Mode::Fortnight(value)
+impl From<TwelveDay> for Mode {
+    fn from(value: TwelveDay) -> Self {
+        Mode::TwelveDay(value)
     }
 }
 
-impl Render<(&Layout, Model)> for Fortnight {
+impl Render<(&Layout, Model)> for TwelveDay {
     fn render(&self, ui: &mut Ui, (layout, model): (&Layout, Model)) {
         let mut evs = model.cals.values().flatten().collect::<Vec<_>>();
         evs.sort_by(|a, b| a.start.cmp(&b.start));
@@ -163,16 +163,14 @@ impl Render<(&Layout, Model)> for Fortnight {
         let zoom = layout.zoom;
         ui.spacing_mut().item_spacing = Vec2::ZERO;
 
-        let start = week_start(layout.now.date());
-        let end = week_end(week_end(layout.now.date()).next_day().unwrap());
+        let start = layout.now.date();
         let mut days = std::iter::successors(Some(start), |x| x.next_day())
-            .take_while(|x| x <= &end)
+            .take(12)
             .collect::<Vec<_>>()
             .into_iter();
         let days = days.by_ref();
-        debug_assert_eq!(days.len() % 7, 0);
 
-        let rows = [4, 3, 4, 3];
+        let rows = [3; 4];
         let row_height = ui.available_height() / rows.len() as f32;
         let mut evs = evs.as_slice();
         for cols in rows {
@@ -181,7 +179,7 @@ impl Render<(&Layout, Model)> for Fortnight {
                     // progressively shrink the slice
                     evs = remove_earlier_events(evs, day);
                     let cell = CellWidget {
-                        zoom: zoom * 1.3,
+                        zoom: zoom * 1.4,
                         display_weekday: true,
                         is_today: day == layout.now.date(),
                         day,
