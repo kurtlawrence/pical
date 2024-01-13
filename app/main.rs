@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     future::Future,
     path::{Path, PathBuf},
+    sync::Mutex,
     time::{Duration, Instant},
 };
 use time::{OffsetDateTime, UtcOffset};
@@ -370,20 +371,49 @@ async fn fetch_iteration(
     Ok(())
 }
 
-/// Change this to suit the how to push a frame to the screen.
-fn push_bitmap(img: &Path, old: Option<&Path>) -> Result<()> {
-    let mut cmd = std::process::Command::new("./it8951-driver");
-    cmd.arg(img.display().to_string());
-    if let Some(old) = &old.map(|x| x.display().to_string()) {
-        cmd.args(["--diff", old]);
-    }
-    let x = cmd
-        .status()
+static DRIVER_PROCESS: Mutex<Option<ScreenDriver>> = Mutex::new(None);
+
+struct ScreenDriver {
+    process: std::process::Child,
+    count: u8,
+}
+
+fn start_it8951_driver() -> Result<()> {
+    use std::process::*;
+    let child = Command::new("./it8951-driver")
+        .stdin(Stdio::piped())
+        .spawn()
         .into_diagnostic()
         .wrap_err("failed to start ./it8951-driver")?;
+    *DRIVER_PROCESS.lock().expect("driver mutex poisoned") = Some(ScreenDriver {
+        process: child,
+        count: 0,
+    });
+    Ok(())
+}
 
-    match x.success() {
-        true => Ok(()),
-        false => Err(miette!("./it8951-driver returned errors")),
+/// Change this to suit the how to push a frame to the screen.
+fn push_bitmap(img: &Path, old: Option<&Path>) -> Result<()> {
+    use std::io::Write;
+    let mut child = DRIVER_PROCESS.lock().expect("driver mutex poisoned");
+    let child = child
+        .as_mut()
+        .ok_or_else(|| miette!("it8951-driver process not started"))?;
+    child.count += 1;
+    let mut line = img.display().to_string();
+    if child.count > 50 {
+        // reset screen
+        child.count = 0;
+        line += " --reset";
+    } else {
+        // add maybe diff
+        if let Some(diff) = old {
+            line += " ";
+            line += &diff.display().to_string();
+        }
+    }
+    match &mut child.process.stdin {
+        Some(child) => writeln!(child, "{}", line).into_diagnostic(),
+        None => Err(miette!("no stdin pipe for it8951-driver")),
     }
 }

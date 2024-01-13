@@ -1,37 +1,23 @@
 use clap::Parser;
 use image::GrayImage;
 use miette::*;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 fn main() -> Result<()> {
     let app = App::parse();
 
-    let img = if app.test {
-        test_image()
+    let driver = app.build_driver()?;
+    if app.test {
+        run_test(driver)
     } else {
-        app.load_image()?
-    };
-    // disable diff functionality for now
-    let diff = app
-        .diff
-        .as_ref()
-        .filter(|_| false)
-        .map(read_image)
-        .transpose()?;
-
-    let mut driver = app.build_driver()?;
-    driver.push_image(&img, diff.as_ref())?;
-    println!("✅ Display refreshed, you should see your image now!");
-    driver.shutdown()
+        run(driver)
+    }
 }
 
 /// Driver to display an image on `IT8951` devices, such as
 /// https://core-electronics.com.au/waveshare-10-3inch-e-paper-display-hat-for-raspberry-pi-black-white.html
 #[derive(Parser)]
 struct App {
-    /// The image to display.
-    img: Option<PathBuf>,
-
     /// The SPI device path.
     #[arg(long, default_value = "/dev/spidev0.0")]
     spi: String,
@@ -40,30 +26,13 @@ struct App {
     #[arg(long, default_value = "/dev/gpiochip0")]
     gpio: String,
 
-    /// Reset device upon conncetion
-    #[arg(long, short)]
-    reset: bool,
-
-    /// Only redraw **rows** of an image which differs this image.
-    /// So `img` is the new image, `diff` is the old image.
-    /// Implies `reset=false`.
-    #[arg(long)]
-    diff: Option<PathBuf>,
-
     /// Run a test routine for checking display is working correctly.
     #[arg(long)]
     test: bool,
 }
 
 impl App {
-    fn load_image(&self) -> Result<GrayImage> {
-        self.img
-            .as_ref()
-            .ok_or_else(|| miette!("please specify an image path"))
-            .and_then(read_image)
-    }
-
-    fn build_driver(&self) -> Result<Driver> {
+    fn build_driver(&self) -> Result<DriverRun> {
         use linux_embedded_hal::{gpio_cdev::*, spidev::*, CdevPin, Delay, Spidev};
         let devspi = &self.spi;
         println!("ℹ Connecting to {devspi}");
@@ -110,7 +79,52 @@ impl App {
     }
 }
 
-struct Driver {
+fn run_test(mut driver: DriverRun) -> Result<()> {
+    let img = test_image();
+    driver.push_image(&img, None)?;
+    println!("✅ Display refreshed, you should see your image now!");
+    driver.shutdown()
+}
+
+fn run(driver: DriverRun) -> Result<()> {
+    let stdin = std::io::stdin();
+    let mut line = String::new();
+    let mut driver = driver.sleep()?;
+
+    loop {
+        line.clear();
+        println!("🔤 Please specifiy <IMAGE> [--reset] [<DIFF IMAGE>] path(s) to render");
+        stdin.read_line(&mut line).into_diagnostic()?;
+        let (img, reset, diff) = parse_line(line.trim())?;
+        let img = read_image(img)?;
+        let diff = diff.map(read_image).transpose()?;
+        let mut d = driver.wake()?;
+        if reset {
+            d.reset()?;
+        };
+        d.push_image(&img, diff.filter(|_| !reset).as_ref())?;
+        driver = d.sleep()?;
+        println!("✅ Display refreshed, you should see your image now!");
+    }
+}
+
+fn parse_line(line: &str) -> Result<(&Path, bool, Option<&Path>)> {
+    let mut split = line.split_whitespace();
+    let img = split
+        .next()
+        .map(Path::new)
+        .ok_or_else(|| miette!("no image path given"))?;
+    let mut reset = false;
+    let mut diff = split.next();
+    if diff.as_deref() == Some("--reset") {
+        reset = true;
+        diff = split.next();
+    }
+
+    Ok((img, reset, diff.map(Path::new)))
+}
+
+struct Driver<State> {
     inner: it8951::IT8951<
         it8951::interface::IT8951SPIInterface<
             linux_embedded_hal::Spidev,
@@ -118,11 +132,13 @@ struct Driver {
             linux_embedded_hal::CdevPin,
             linux_embedded_hal::Delay,
         >,
-        it8951::Run,
+        State,
     >,
 }
 
-impl Driver {
+type DriverRun = Driver<it8951::Run>;
+
+impl Driver<it8951::Run> {
     fn push_image(&mut self, img: &GrayImage, diff: Option<&GrayImage>) -> Result<()> {
         use it8951::memory_converter_settings::*;
         let it8951::DevInfo {
@@ -164,11 +180,33 @@ impl Driver {
             .map_err(|e| miette!("failed to display image buffer: {:?}", e))
     }
 
+    fn reset(&mut self) -> Result<()> {
+        self.inner
+            .reset()
+            .map_err(|e| miette!("failed to reset screen: {:?}", e))
+    }
+
+    fn sleep(self) -> Result<Driver<it8951::PowerDown>> {
+        self.inner
+            .sleep()
+            .map_err(|e| miette!("failed to sleep device: {:?}", e))
+            .map(|inner| Driver { inner })
+    }
+
     fn shutdown(self) -> Result<()> {
         self.inner
             .sleep()
             .map_err(|e| miette!("failed to sleep device: {:?}", e))
             .map(|_| ())
+    }
+}
+
+impl Driver<it8951::PowerDown> {
+    fn wake(self) -> Result<Driver<it8951::Run>> {
+        self.inner
+            .sys_run()
+            .map_err(|e| miette!("failed to wake device: {:?}", e))
+            .map(|inner| Driver { inner })
     }
 }
 
