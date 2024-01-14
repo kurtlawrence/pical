@@ -302,16 +302,24 @@ async fn fetch_iteration(
     if model
         .weather
         .as_ref()
-        .map(|x| x.last_update.duration_since(Instant::now()) > Duration::from_secs(60 * 10))
+        .map(|x| Instant::now().duration_since(x.last_update) > Duration::from_secs(60 * 10))
         .unwrap_or(true)
     {
         let [lat, long] = coords;
         let tz = now.offset();
-        let url = reqwest::Url::parse_with_params("https://api.open-meteo.com/v1/forecast?current=temperature_2m,relative_humidity_2m,precipitation,weather_code&daily=weather_code,temperature_2m_max,precipitation_probability_max&forecast_days=16", &[
+        let url = reqwest::Url::parse_with_params(
+            "https://api.open-meteo.com/v1/forecast?\
+                current=temperature_2m,relative_humidity_2m,precipitation,weather_code&\
+                daily=weather_code,temperature_2m_max,precipitation_probability_max&\
+                forecast_days=16",
+            &[
                 ("latitude", lat.to_string()),
                 ("longitude", long.to_string()),
-                ("timezone", format!("GMT{:+}", tz.whole_hours()))
-        ]).into_diagnostic().wrap_err("URL parse failed")?;
+                ("timezone", format!("GMT{:+}", tz.whole_hours())),
+            ],
+        )
+        .into_diagnostic()
+        .wrap_err("URL parse failed")?;
         let url = url.as_str();
         let resp = pical::fetch::json(client, url, []).await?;
         weather = Some(pical::data::weather::Weather::from_open_meteo(resp)?);
@@ -324,7 +332,7 @@ async fn fetch_iteration(
     if model
         .moon
         .as_ref()
-        .map(|x| x.last_update.duration_since(Instant::now()) > Duration::from_secs(60 * 60 * 12))
+        .map(|x| Instant::now().duration_since(x.last_update) > Duration::from_secs(60 * 60 * 12))
         .unwrap_or(true)
     {
         let [lat, long] = coords;
