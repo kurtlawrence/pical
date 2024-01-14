@@ -15,7 +15,7 @@ pub struct Moon {
     pub phase: Phase,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Phase {
     NewMoon,
     WaxingCrescent,

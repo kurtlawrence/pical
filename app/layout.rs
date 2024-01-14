@@ -98,20 +98,6 @@ impl Render<Model> for Layout {
     }
 }
 
-fn moon_icon(ui: &mut Ui, phase: moon::Phase, size: f32) {
-    use moon::Phase::*;
-    let txt = match phase {
-        NewMoon => "🌑",
-        WaxingCrescent => "🌘",
-        FirstQuarter => "🌗",
-        WaxingGibbous => "🌖",
-        FullMoon => "🌕",
-        WaningGibbous => "🌔",
-        ThirdQuarter => "🌓",
-        WaningCrescent => "🌒",
-    };
-    ui.label(RichText::new(txt).size(size));
-}
 
 fn weather_icon(ui: &mut Ui, code: weather::Code, size: f32) {
     use weather::Code::*;
@@ -396,4 +382,20 @@ impl<'a> CellWidget<'a> {
             ui.add(Label::new(RichText::new(summary).small()).truncate(true));
         });
     }
+}
+
+fn moon_icon(ui: &mut Ui, phase: moon::Phase, size: f32) {
+    use moon::Phase::*;
+    // invert the colouring on black/white
+    let txt = match phase {
+        NewMoon => "🌕",
+        WaxingCrescent => "🌔",
+        FirstQuarter => "🌓",
+        WaxingGibbous => "🌒",
+        FullMoon => "🌑",
+        WaningGibbous => "🌘",
+        ThirdQuarter => "🌗",
+        WaningCrescent => "🌖",
+    };
+    ui.label(RichText::new(txt).size(size));
 }
