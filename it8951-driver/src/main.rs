@@ -176,7 +176,7 @@ impl Driver<it8951::Run> {
         println!("✅ Buffer updated!");
 
         self.inner
-            .display(it8951::WaveformMode::GL16)
+            .display(it8951::WaveformMode::GrayscaleClearing16)
             .map_err(|e| miette!("failed to display image buffer: {:?}", e))
     }
 
