@@ -410,14 +410,14 @@ fn push_bitmap(img: &Path, old: Option<&Path>) -> Result<()> {
         .ok_or_else(|| miette!("it8951-driver process not started"))?;
     child.count += 1;
     let mut line = img.display().to_string();
-    if child.count > 50 {
-        // reset screen
+    if child.count > 10 {
+        // do high screen
         child.count = 0;
-        line += " --reset";
+        line += " --high";
     } else {
         // add maybe diff
         if let Some(diff) = old {
-            line += " ";
+            line += " --low ";
             line += &diff.display().to_string();
         }
     }

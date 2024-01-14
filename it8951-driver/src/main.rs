@@ -1,5 +1,6 @@
 use clap::Parser;
 use image::GrayImage;
+use it8951::WaveformMode;
 use miette::*;
 use std::path::Path;
 
@@ -81,7 +82,7 @@ impl App {
 
 fn run_test(mut driver: DriverRun) -> Result<()> {
     let img = test_image();
-    driver.push_image(&img, None)?;
+    driver.push_image(&img, None, WaveformMode::GrayscaleClearing16)?;
     println!("✅ Display refreshed, you should see your image now!");
     driver.shutdown()
 }
@@ -93,35 +94,53 @@ fn run(driver: DriverRun) -> Result<()> {
 
     loop {
         line.clear();
-        println!("🔤 Please specifiy <IMAGE> [--reset] [<DIFF IMAGE>] path(s) to render");
+        println!("🔤 Please specifiy <IMAGE> [--high|--low|--reset] [<DIFF IMAGE>] path(s) to render");
         stdin.read_line(&mut line).into_diagnostic()?;
-        let (img, reset, diff) = parse_line(line.trim())?;
+        let (img, quality, diff) = parse_line(line.trim())?;
         let img = read_image(img)?;
-        let diff = diff.map(read_image).transpose()?;
+        let mut diff = diff.map(read_image).transpose()?;
         let mut d = driver.wake()?;
-        if reset {
-            d.reset()?;
+        let mode = match quality {
+            Quality::Reset => {
+                diff = None;
+                d.reset()?;
+                WaveformMode::GrayscaleClearing16
+            }
+            Quality::High => WaveformMode::GrayscaleClearing16,
+            Quality::Low => WaveformMode::GL16,
         };
-        d.push_image(&img, diff.filter(|_| !reset).as_ref())?;
+        d.push_image(&img, diff.as_ref(), mode)?;
         driver = d.sleep()?;
         println!("✅ Display refreshed, you should see your image now!");
     }
 }
 
-fn parse_line(line: &str) -> Result<(&Path, bool, Option<&Path>)> {
+enum Quality {
+    Reset,
+    High,
+    Low,
+}
+
+fn parse_line(line: &str) -> Result<(&Path, Quality, Option<&Path>)> {
     let mut split = line.split_whitespace();
     let img = split
         .next()
         .map(Path::new)
         .ok_or_else(|| miette!("no image path given"))?;
-    let mut reset = false;
+    let mut quality = Quality::High;
     let mut diff = split.next();
     if diff.as_deref() == Some("--reset") {
-        reset = true;
+        quality = Quality::Reset;
+        diff = split.next();
+    } else if diff.as_deref() == Some("--high") {
+        quality = Quality::High;
+        diff = split.next();
+    } else if diff.as_deref() == Some("--low") {
+        quality = Quality::Low;
         diff = split.next();
     }
 
-    Ok((img, reset, diff.map(Path::new)))
+    Ok((img, quality, diff.map(Path::new)))
 }
 
 struct Driver<State> {
@@ -139,7 +158,12 @@ struct Driver<State> {
 type DriverRun = Driver<it8951::Run>;
 
 impl Driver<it8951::Run> {
-    fn push_image(&mut self, img: &GrayImage, diff: Option<&GrayImage>) -> Result<()> {
+    fn push_image(
+        &mut self,
+        img: &GrayImage,
+        diff: Option<&GrayImage>,
+        mode: WaveformMode,
+    ) -> Result<()> {
         use it8951::memory_converter_settings::*;
         let it8951::DevInfo {
             panel_width,
@@ -176,7 +200,7 @@ impl Driver<it8951::Run> {
         println!("✅ Buffer updated!");
 
         self.inner
-            .display(it8951::WaveformMode::GrayscaleClearing16)
+            .display(mode)
             .map_err(|e| miette!("failed to display image buffer: {:?}", e))
     }
 
