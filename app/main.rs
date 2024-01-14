@@ -28,11 +28,12 @@ async fn main() -> Result<()> {
     } = Config::read_or_default(cpath).await?;
     log::info!("✅ read in config from {cpath}");
 
+    #[cfg(not(feature = "local"))]
     start_it8951_driver()?;
     let state = State {
         layout: pical::layout::Layout {
             zoom,
-            mode: pical::layout::TwelveDay.into(),
+            mode: pical::layout::Agenda.into(),
             ..Default::default()
         },
         push_bitmap,

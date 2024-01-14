@@ -40,6 +40,7 @@ impl Render<Model> for Layout {
         let zoom = match self.mode {
             Mode::TwelveDay(_) => self.zoom * 1.4,
             Mode::Month(_) => self.zoom,
+            Mode::Agenda(_) => self.zoom * 2.0,
         };
         size_fonts(&mut ui.style_mut().text_styles, zoom);
 
@@ -104,6 +105,7 @@ impl Render<Model> for Layout {
 pub enum Mode {
     TwelveDay(TwelveDay),
     Month(Month),
+    Agenda(Agenda),
 }
 
 impl Render<(&Layout, Model)> for Mode {
@@ -111,6 +113,7 @@ impl Render<(&Layout, Model)> for Mode {
         match self {
             Mode::Month(month) => month.render(ui, ctx),
             Mode::TwelveDay(fnite) => fnite.render(ui, ctx),
+            Mode::Agenda(agenda) => agenda.render(ui, ctx),
         }
     }
 }
@@ -153,6 +156,7 @@ impl Render<(&Layout, Model)> for TwelveDay {
                         zoom: zoom * 1.4,
                         display_weekday: true,
                         is_today: day == layout.now.date(),
+                        pad: true,
                         day,
                         model: &model,
                     };
@@ -211,6 +215,7 @@ impl Render<(&Layout, Model)> for Month {
                         zoom,
                         is_today: day == layout.now.date(),
                         display_weekday: false,
+                        pad: true,
                         day,
                         model: &model,
                     };
@@ -226,6 +231,53 @@ impl Render<(&Layout, Model)> for Month {
 fn end_of_month(date: Date) -> Date {
     date.replace_day(time::util::days_in_year_month(date.year(), date.month()))
         .unwrap()
+}
+
+// ##### MONTH #################################################################
+
+#[derive(Default, Copy, Clone)]
+pub struct Agenda;
+
+impl From<Agenda> for Mode {
+    fn from(value: Agenda) -> Self {
+        Mode::Agenda(value)
+    }
+}
+
+impl Render<(&Layout, Model)> for Agenda {
+    fn render(&self, ui: &mut Ui, (layout, model): (&Layout, Model)) {
+        let mut evs = model.cals.values().flatten().collect::<Vec<_>>();
+        evs.sort_by(|a, b| a.start.cmp(&b.start));
+
+        let zoom = layout.zoom * 2.2;
+        ui.spacing_mut().item_spacing = Vec2::ZERO;
+
+        let mut evs = evs.as_slice();
+        let mut day = layout.now.date();
+        ui.columns(2, |cs| {
+            for ui in cs {
+                'col: loop {
+                    // progressively shrink the slice
+                    evs = remove_earlier_events(evs, day);
+                    CellWidget {
+                        zoom,
+                        is_today: day == layout.now.date(),
+                        display_weekday: true,
+                        pad: false,
+                        day,
+                        model: &model,
+                    }
+                    .day_cell(ui, evs);
+
+                    day = day.next_day().unwrap();
+
+                    if ui.available_height() <= 120.0 {
+                        break 'col;
+                    }
+                }
+            }
+        });
+    }
 }
 
 // ##### COMMON ################################################################
@@ -260,6 +312,7 @@ struct CellWidget<'a> {
     zoom: f32,
     is_today: bool,
     display_weekday: bool,
+    pad: bool,
     day: Date,
     model: &'a Model,
 }
@@ -270,6 +323,7 @@ impl<'a> CellWidget<'a> {
             zoom,
             is_today: _,
             display_weekday: _,
+            pad,
             day,
             model: _,
         } = *self;
@@ -290,8 +344,9 @@ impl<'a> CellWidget<'a> {
                             .for_each(|e| self.event_line(ui, e));
                     });
 
-                // pad out
-                ui.allocate_space(ui.available_size());
+                if pad {
+                    ui.allocate_space(ui.available_size());
+                }
             });
     }
 
@@ -300,6 +355,7 @@ impl<'a> CellWidget<'a> {
             zoom,
             is_today,
             display_weekday,
+            pad: _,
             day,
             model,
         } = *self;
@@ -346,6 +402,7 @@ impl<'a> CellWidget<'a> {
             zoom,
             is_today: _,
             display_weekday: _,
+            pad: _,
             day,
             model: _,
         } = *self;
