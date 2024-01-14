@@ -18,7 +18,7 @@ pub struct Ob {
     pub precipitation_prob: Option<f32>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Code {
     ClearSky,
     MainlyClear,

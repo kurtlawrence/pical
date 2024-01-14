@@ -98,21 +98,6 @@ impl Render<Model> for Layout {
     }
 }
 
-
-fn weather_icon(ui: &mut Ui, code: weather::Code, size: f32) {
-    use weather::Code::*;
-    let txt = match code {
-        ClearSky | MainlyClear => "☀",
-        PartlyCloudy => "⛅",
-        Overcast => "☁",
-        Fog => "🌫",
-        Drizzle | Rain => "☔",
-        Snow => "🌨",
-        Thuderstorm => "⚡",
-    };
-    ui.label(RichText::new(txt).size(size));
-}
-
 // ##### MODE ##################################################################
 
 #[derive(Clone)]
@@ -396,6 +381,19 @@ fn moon_icon(ui: &mut Ui, phase: moon::Phase, size: f32) {
         WaningGibbous => "🌘",
         ThirdQuarter => "🌗",
         WaningCrescent => "🌖",
+    };
+    ui.label(RichText::new(txt).size(size));
+}
+
+fn weather_icon(ui: &mut Ui, code: weather::Code, size: f32) {
+    use weather::Code::*;
+    let txt = match code {
+        ClearSky | MainlyClear => "☀",
+        PartlyCloudy => "⛅",
+        Overcast | Fog => "☁",
+        Drizzle | Rain => "☔",
+        Snow => "🌨",
+        Thuderstorm => "⚡",
     };
     ui.label(RichText::new(txt).size(size));
 }
