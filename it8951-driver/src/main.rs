@@ -94,7 +94,9 @@ fn run(driver: DriverRun) -> Result<()> {
 
     loop {
         line.clear();
-        println!("🔤 Please specifiy <IMAGE> [--high|--low|--reset] [<DIFF IMAGE>] path(s) to render");
+        println!(
+            "🔤 Please specifiy <IMAGE> [--high|--low|--reset] [<DIFF IMAGE>] path(s) to render"
+        );
         stdin.read_line(&mut line).into_diagnostic()?;
         let (img, quality, diff) = parse_line(line.trim())?;
         let img = read_image(img)?;
@@ -107,7 +109,7 @@ fn run(driver: DriverRun) -> Result<()> {
                 WaveformMode::GrayscaleClearing16
             }
             Quality::High => WaveformMode::GrayscaleClearing16,
-            Quality::Low => WaveformMode::GL16,
+            Quality::Low => WaveformMode::DU4,
         };
         d.push_image(&img, diff.as_ref(), mode)?;
         driver = d.sleep()?;
