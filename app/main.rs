@@ -59,14 +59,23 @@ async fn main() -> Result<()> {
 }
 
 fn init_logging() -> Result<()> {
-    simplelog::TermLogger::init(
-        log::LevelFilter::Debug,
-        simplelog::ConfigBuilder::default()
-            .add_filter_allow_str("pical")
-            .build(),
-        Default::default(),
-        simplelog::ColorChoice::Auto,
-    )
+    let lvl = log::LevelFilter::Debug;
+    let config = simplelog::ConfigBuilder::default()
+        .add_filter_allow_str("pical")
+        .build();
+    simplelog::CombinedLogger::init(vec![
+        simplelog::WriteLogger::new(
+            lvl,
+            config.clone(),
+            std::fs::File::create("pical.log").into_diagnostic()?,
+        ),
+        simplelog::TermLogger::new(
+            lvl,
+            config,
+            Default::default(),
+            simplelog::ColorChoice::Auto,
+        ),
+    ])
     .into_diagnostic()
     .wrap_err("initialising logging failed")
 }
