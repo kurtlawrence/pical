@@ -297,10 +297,14 @@ async fn fetch_iteration(
 
     // download the calendar(s)
     let mut cals = Vec::with_capacity(calendars.len());
+    let limit = std::iter::successors(Some(now.date()), |x| x.next_day())
+        .nth(60)
+        .map(|d| now.replace_date(d))
+        .unwrap_or(now);
     for (name, url) in calendars {
         let ical = pical::fetch::string(client, url, [])
             .await
-            .and_then(|x| pical::data::cal::parse_ical(&x, now.offset()))?;
+            .and_then(|x| pical::data::cal::parse_ical(&x, now.offset(), limit))?;
         cals.push((name.clone(), ical));
         log::info!("Fetched latest calendars");
     }
