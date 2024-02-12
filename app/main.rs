@@ -401,24 +401,30 @@ struct ScreenDriver {
 }
 
 fn start_it8951_driver() -> Result<()> {
-    use std::process::*;
-    let child = Command::new("./it8951-driver")
-        .stdin(Stdio::piped())
-        .spawn()
-        .into_diagnostic()
-        .wrap_err("failed to start ./it8951-driver")?;
-    *DRIVER_PROCESS.lock().expect("driver mutex poisoned") = Some(ScreenDriver {
-        process: child,
-        count: 0,
-    });
+    *DRIVER_PROCESS.lock().expect("driver mutex poisoned") = Some(ScreenDriver::start()?);
     Ok(())
+}
+
+impl ScreenDriver {
+    fn start() -> Result<Self> {
+        use std::process::*;
+        let child = Command::new("./it8951-driver")
+            .stdin(Stdio::piped())
+            .spawn()
+            .into_diagnostic()
+            .wrap_err("failed to start ./it8951-driver")?;
+        Ok(ScreenDriver {
+            process: child,
+            count: 0,
+        })
+    }
 }
 
 /// Change this to suit the how to push a frame to the screen.
 fn push_bitmap(img: &Path, old: Option<&Path>) -> Result<()> {
     use std::io::Write;
-    let mut child = DRIVER_PROCESS.lock().expect("driver mutex poisoned");
-    let child = child
+    let mut child_ = DRIVER_PROCESS.lock().expect("driver mutex poisoned");
+    let child = child_
         .as_mut()
         .ok_or_else(|| miette!("it8951-driver process not started"))?;
     child.count += 1;
@@ -434,8 +440,39 @@ fn push_bitmap(img: &Path, old: Option<&Path>) -> Result<()> {
             line += &diff.display().to_string();
         }
     }
-    match &mut child.process.stdin {
-        Some(child) => writeln!(child, "{}", line).into_diagnostic(),
-        None => Err(miette!("no stdin pipe for it8951-driver")),
+
+    drop(child_);
+    let jh = std::thread::spawn(move || {
+        let mut child = DRIVER_PROCESS.lock().expect("driver mutex poisoned");
+        let child = child
+            .as_mut()
+            .ok_or_else(|| miette!("it8951-driver process not started"))?;
+        match &mut child.process.stdin {
+            Some(child) => writeln!(child, "{}", line).into_diagnostic(),
+            None => Err(miette!("no stdin pipe for it8951-driver")),
+        }
+    });
+
+    let mut restart = true;
+    for _ in 0..60 {
+        if jh.is_finished() {
+            restart = false;
+            break;
+        }
+        std::thread::sleep(Duration::from_secs(1));
     }
+
+    if restart {
+        log::warn!("Restarting it8951-driver processing");
+        let mut child_ = DRIVER_PROCESS.lock().expect("driver mutex poisoned");
+        let child = child_
+            .as_mut()
+            .ok_or_else(|| miette!("it8951-driver process not started"))?;
+        child.process.kill().into_diagnostic()?;
+        *child = ScreenDriver::start()?;
+    } else {
+        jh.join().unwrap()?;
+    }
+
+    Ok(())
 }
