@@ -4,14 +4,25 @@ use serde::{Deserialize, Serialize};
 use std::{
     future::Future,
     path::{Path, PathBuf},
-    sync::Mutex,
+    pin::Pin,
     time::{Duration, Instant},
 };
 use time::{OffsetDateTime, UtcOffset};
-use tokio::time::{interval, MissedTickBehavior};
+use tokio::{
+    io::AsyncWriteExt,
+    sync::Mutex,
+    time::{interval, MissedTickBehavior},
+};
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .into_diagnostic()?
+        .block_on(main_())
+}
+
+async fn main_() -> Result<()> {
     init_logging()?;
 
     let cpath = "./config.pical.toml";
@@ -29,14 +40,14 @@ async fn main() -> Result<()> {
     log::info!("✅ read in config from {cpath}");
 
     #[cfg(not(feature = "local"))]
-    start_it8951_driver()?;
+    start_it8951_driver().await?;
     let state = State {
         layout: pical::layout::Layout {
             zoom,
             mode: pical::layout::Agenda.into(),
             ..Default::default()
         },
-        push_bitmap,
+        push_bitmap: |img, old| Box::pin(async move { push_bitmap(&img, old.as_deref()).await }),
         ..Default::default()
     };
 
@@ -139,7 +150,7 @@ impl Config {
 struct State {
     model: pical::data::Model,
     layout: pical::layout::Layout,
-    push_bitmap: fn(&Path, Option<&Path>) -> Result<()>,
+    push_bitmap: fn(PathBuf, Option<PathBuf>) -> Pin<Box<dyn Future<Output = Result<()>>>>,
 }
 
 impl Default for State {
@@ -147,7 +158,9 @@ impl Default for State {
         Self {
             model: Default::default(),
             layout: Default::default(),
-            push_bitmap: |_path, _old| Err(miette!("provide a push_bitmap function")),
+            push_bitmap: |_path, _old| {
+                Box::pin(async { Err(miette!("provide a push_bitmap function")) })
+            },
         }
     }
 }
@@ -199,7 +212,8 @@ async fn render_loop(
         let save_time = now.elapsed();
 
         let now = std::time::Instant::now();
-        if let Err(e) = push_bitmap(path.as_ref(), old.as_deref())
+        if let Err(e) = push_bitmap(path.into(), old)
+            .await
             .wrap_err_with(|| format!("failed to push bitmap to {path}"))
         {
             log_error(e);
@@ -393,23 +407,23 @@ async fn fetch_iteration(
     Ok(())
 }
 
-static DRIVER_PROCESS: Mutex<Option<ScreenDriver>> = Mutex::new(None);
+static DRIVER_PROCESS: Mutex<Option<ScreenDriver>> = Mutex::const_new(None);
 
 struct ScreenDriver {
-    process: std::process::Child,
+    process: tokio::process::Child,
     count: u8,
 }
 
-fn start_it8951_driver() -> Result<()> {
-    *DRIVER_PROCESS.lock().expect("driver mutex poisoned") = Some(ScreenDriver::start()?);
+async fn start_it8951_driver() -> Result<()> {
+    *DRIVER_PROCESS.lock().await = Some(ScreenDriver::start()?);
     Ok(())
 }
 
 impl ScreenDriver {
     fn start() -> Result<Self> {
-        use std::process::*;
+        use tokio::process::*;
         let child = Command::new("./it8951-driver")
-            .stdin(Stdio::piped())
+            .stdin(std::process::Stdio::piped())
             .spawn()
             .into_diagnostic()
             .wrap_err("failed to start ./it8951-driver")?;
@@ -421,9 +435,8 @@ impl ScreenDriver {
 }
 
 /// Change this to suit the how to push a frame to the screen.
-fn push_bitmap(img: &Path, old: Option<&Path>) -> Result<()> {
-    use std::io::Write;
-    let mut child_ = DRIVER_PROCESS.lock().expect("driver mutex poisoned");
+async fn push_bitmap(img: &Path, old: Option<&Path>) -> Result<()> {
+    let mut child_ = DRIVER_PROCESS.lock().await;
     let child = child_
         .as_mut()
         .ok_or_else(|| miette!("it8951-driver process not started"))?;
@@ -441,38 +454,22 @@ fn push_bitmap(img: &Path, old: Option<&Path>) -> Result<()> {
         }
     }
 
-    drop(child_);
-    let jh = std::thread::spawn(move || {
-        let mut child = DRIVER_PROCESS.lock().expect("driver mutex poisoned");
-        let child = child
-            .as_mut()
-            .ok_or_else(|| miette!("it8951-driver process not started"))?;
+    let x = tokio::time::timeout(Duration::from_secs(60), async {
         match &mut child.process.stdin {
-            Some(child) => writeln!(child, "{}", line).into_diagnostic(),
+            Some(child) => child.write_all(line.as_bytes()).await.into_diagnostic(),
             None => Err(miette!("no stdin pipe for it8951-driver")),
         }
-    });
+    })
+    .await;
 
-    let mut restart = true;
-    for _ in 0..60 {
-        if jh.is_finished() {
-            restart = false;
-            break;
+    match x {
+        Ok(res) => res,
+        // timed out
+        Err(_) => {
+            log::warn!("Restarting it8951-driver processing");
+            child.process.kill().await.into_diagnostic()?;
+            *child = ScreenDriver::start()?;
+            Ok(())
         }
-        std::thread::sleep(Duration::from_secs(1));
     }
-
-    if restart {
-        log::warn!("Restarting it8951-driver processing");
-        let mut child_ = DRIVER_PROCESS.lock().expect("driver mutex poisoned");
-        let child = child_
-            .as_mut()
-            .ok_or_else(|| miette!("it8951-driver process not started"))?;
-        child.process.kill().into_diagnostic()?;
-        *child = ScreenDriver::start()?;
-    } else {
-        jh.join().unwrap()?;
-    }
-
-    Ok(())
 }
