@@ -454,6 +454,8 @@ async fn push_bitmap(img: &Path, old: Option<&Path>) -> Result<()> {
         }
     }
 
+    line.push('\n'); // new line to end
+
     let x = tokio::time::timeout(Duration::from_secs(60), async {
         match &mut child.process.stdin {
             Some(child) => child.write_all(line.as_bytes()).await.into_diagnostic(),
