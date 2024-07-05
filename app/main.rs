@@ -412,6 +412,7 @@ static DRIVER_PROCESS: Mutex<Option<ScreenDriver>> = Mutex::const_new(None);
 struct ScreenDriver {
     process: tokio::process::Child,
     count: u8,
+    reset_count: u16,
 }
 
 async fn start_it8951_driver() -> Result<()> {
@@ -430,6 +431,7 @@ impl ScreenDriver {
         Ok(ScreenDriver {
             process: child,
             count: 0,
+            reset_count: 0,
         })
     }
 }
@@ -441,6 +443,7 @@ async fn push_bitmap(img: &Path, old: Option<&Path>) -> Result<()> {
         .as_mut()
         .ok_or_else(|| miette!("it8951-driver process not started"))?;
     child.count += 1;
+    child.reset_count += 1;
     let mut line = img.display().to_string();
     if child.count > 10 {
         // do high screen
@@ -464,14 +467,23 @@ async fn push_bitmap(img: &Path, old: Option<&Path>) -> Result<()> {
     })
     .await;
 
-    match x {
-        Ok(res) => res,
-        // timed out
-        Err(_) => {
-            log::warn!("Restarting it8951-driver processing");
-            child.process.kill().await.into_diagnostic()?;
-            *child = ScreenDriver::start()?;
-            Ok(())
+    let reset = match x {
+        Ok(res) => {
+            res?;
+            false
         }
+        // timed out
+        Err(e) => {
+            log::error!("{e}");
+            true
+        }
+    };
+
+    if child.reset_count > 180 || reset {
+        log::warn!("Restarting it8951-driver processing");
+        child.process.kill().await.into_diagnostic()?;
+        *child = ScreenDriver::start()?;
     }
+
+    Ok(())
 }
