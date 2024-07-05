@@ -44,7 +44,7 @@ async fn main_() -> Result<()> {
     let state = State {
         layout: pical::layout::Layout {
             zoom,
-            mode: pical::layout::Agenda.into(),
+            mode: pical::layout::TwelveDay.into(),
             ..Default::default()
         },
         push_bitmap: |img, old| Box::pin(async move { push_bitmap(&img, old.as_deref()).await }),

@@ -38,7 +38,7 @@ impl Default for Layout {
 impl Render<Model> for Layout {
     fn render(&self, ui: &mut Ui, model: Model) {
         let zoom = match self.mode {
-            Mode::TwelveDay(_) => self.zoom * 1.4,
+            Mode::TwelveDay(_) => self.zoom * 2.0,
             Mode::Month(_) => self.zoom,
             Mode::Agenda(_) => self.zoom * 2.0,
         };
@@ -137,14 +137,15 @@ impl Render<(&Layout, Model)> for TwelveDay {
         let zoom = layout.zoom;
         ui.spacing_mut().item_spacing = Vec2::ZERO;
 
+        let rows = [3; 3];
+
         let start = layout.now.date();
         let mut days = std::iter::successors(Some(start), |x| x.next_day())
-            .take(12)
+            .take(rows.iter().sum())
             .collect::<Vec<_>>()
             .into_iter();
         let days = days.by_ref();
 
-        let rows = [3; 4];
         let row_height = ui.available_height() / rows.len() as f32;
         let mut evs = evs.as_slice();
         for cols in rows {
@@ -153,7 +154,7 @@ impl Render<(&Layout, Model)> for TwelveDay {
                     // progressively shrink the slice
                     evs = remove_earlier_events(evs, day);
                     let cell = CellWidget {
-                        zoom: zoom * 1.4,
+                        zoom: zoom * 1.6,
                         display_weekday: true,
                         is_today: day == layout.now.date(),
                         pad: true,
@@ -233,7 +234,7 @@ fn end_of_month(date: Date) -> Date {
         .unwrap()
 }
 
-// ##### MONTH #################################################################
+// ##### AGENDA ################################################################
 
 #[derive(Default, Copy, Clone)]
 pub struct Agenda;
