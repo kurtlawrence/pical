@@ -88,8 +88,14 @@ where
 #[cfg(feature = "local")]
 mod local {
     pub const FILES: &[(&str, &str)] = &[
-        ( "https://calendar.google.com/calendar/ical/path-to-cal", "./kurt-cal.ics"),
-        ( "https://api.open-meteo.com/v1/forecast", "./weather.json"),
-        ( "https://api.stormglass.io/v2/astronomy/point", "./moon.json"),
+        (
+            "https://calendar.google.com/calendar/ical/path-to-cal",
+            "./kurt-cal.ics",
+        ),
+        ("https://api.open-meteo.com/v1/forecast", "./weather.json"),
+        (
+            "https://api.stormglass.io/v2/astronomy/point",
+            "./moon.json",
+        ),
     ];
 }
